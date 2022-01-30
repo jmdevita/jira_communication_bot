@@ -104,7 +104,7 @@ def response():
         print("token valid")
         #thread = Process(target=processing, args=(post_data['data'],))
         #thread.start() # Doesn't work with Lambda (as it shuts down as soon as it returns a message)
-        #processing_sprint_optimization(post_data['data'])
+        processing_sprint_optimization(post_data['data'])
         release_note_bot(post_data['data'])
 
         return {"message": "Accepted"}, 202
