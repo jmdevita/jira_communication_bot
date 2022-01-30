@@ -3,6 +3,8 @@ from flask import Flask, request
 import json
 import requests, sys, os
 from time import sleep
+#from dotenv import load_dotenv
+#load_dotenv()
 
 app = Flask(__name__)
 
@@ -14,7 +16,7 @@ def processing_sprint_optimization(sprint_name):
     sleep(2)
     payload = get_info(sprint_name)
     ### Send Slack Webhook
-    url = os.get_env('SPRINT_OPTIMIZATION_BOT_WEBHOOK')
+    url = os.getenv('SPRINT_OPTIMIZATION_BOT_WEBHOOK')
     slack_data = {
         "current_ticket_count": str(payload[0]),
         "current_ticket_count_avg": str(payload[1]),
@@ -46,9 +48,38 @@ def release_note_bot(sprint_name):
     # Intake Jira Webhook
     payload = release_notes(sprint_name)
     ### Send Slack Webhook
-    url = os.get_env('RELEASE_NOTE_WEBHOOK')
+    url = os.getenv('RELEASE_NOTE_WEBHOOK')
 
-    slack_data = payload
+    # Loop for all messages in release notes
+    full_release = []
+    for count in range(0, len(payload['release_notes']['keys'])):
+        single_release = '<{url}|{key}> | {release_note}'.format(url=payload['release_notes']['links'][count], key=payload['release_notes']['keys'][count],\
+            release_notes=payload['release_note']['notes'][count])
+        full_release.append(single_release)
+
+    slack_data = {
+        "blocks": [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": "The Data Team has completed their sprint!"
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "Ticket Count: {tc}\nStory Points: {sp}\n\n -- <https://wellapp.atlassian.net/wiki/spaces/EN/pages/2381283406/Releases|Release Notes> --\n{rn}"\
+                        .format(
+                            tc=payload['ticket_count'],
+                            sp=payload['story_points'],
+                            rn='\n'.join(full_release)
+                        )
+                }
+            }
+        ]
+    }
     byte_length = str(sys.getsizeof(slack_data))
     headers = {'Content-Type': "application/json", 'Content-Length': byte_length}
     slack_response = requests.post(url, data=json.dumps(slack_data), headers=headers)
@@ -61,15 +92,19 @@ def response():
     # Definition for Process
 
     print('Recieved Message')
-    post_data = request.get_json()
+    try:
+        post_data = request.get_json()
+    except TypeError:
+        return {"message": "No Data Passed Through"}, 401
     try:
         verify_token = post_data['token']
     except KeyError:
         verify_token = "INVALID"
     if verify_token == WEBHOOK_VERIFY_TOKEN:
+        print("token valid")
         #thread = Process(target=processing, args=(post_data['data'],))
         #thread.start() # Doesn't work with Lambda (as it shuts down as soon as it returns a message)
-        processing_sprint_optimization(post_data['data'])
+        #processing_sprint_optimization(post_data['data'])
         release_note_bot(post_data['data'])
 
         return {"message": "Accepted"}, 202

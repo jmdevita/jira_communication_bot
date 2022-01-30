@@ -165,7 +165,6 @@ def sprint_story_points(sprint_name):
 
         df = df.append(pd.json_normalize(results["issues"]))
         count += 50
-        sleep(2)
 
     df["fields.url"] = 'https://wellapp.atlassian.net/browse/'+df["key"]
     df = df[['key', 'fields.issuetype.name','fields.created', 'fields.customfield_10008','fields.customfield_10827', 'fields.summary', 'fields.status.name', 'fields.description', 'fields.assignee.displayName', 'fields.customfield_10899', 'fields.priority.name', 'fields.url', 'fields.labels']]
@@ -246,7 +245,6 @@ def main(sprint_name = 'Panda Dash 74'):
 
         df_2 = df_2.append(pd.json_normalize(results["issues"]))
         count += 50
-        sleep(2)
     df = pd.concat(
         [df, df_2],
         axis=0,
@@ -295,7 +293,6 @@ def main(sprint_name = 'Panda Dash 74'):
         print("Sprint Ticket Table already created")
 
     new_sprint(sprint_name)
-    sleep(3)
 
     sprint_ticket_stats(tickets, sprint_story_points(sprint_name), completion_rate, percent_complete_under_sprint, get_sprint_id(sprint_name))
 
@@ -321,7 +318,6 @@ def main(sprint_name = 'Panda Dash 74'):
 
         df_bug = df_bug.append(pd.json_normalize(results["issues"]))
         count += 50
-        sleep(2)
 
     from datetime import datetime
 
@@ -531,7 +527,6 @@ def release_notes(sprint_name):
             break
         df = df.append(pd.json_normalize(results_new["issues"]))
         count += 50
-        sleep(0.5)
     
     df["fields.url"] = 'https://wellapp.atlassian.net/browse/'+df["key"]
     # Take main df with fields and reduce to only relevant columns and only if the ticket is completed
