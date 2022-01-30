@@ -2,11 +2,9 @@
 import pandas as pd
 import numpy as np
 from atlassian import Jira
-import os
-from time import sleep
+import os, re, random
+from decimal import Decimal
 from dateutil.parser import isoparse
-from datetime import datetime
-import re
 
 import boto3, random
 from boto3.dynamodb.conditions import Key, Attr
@@ -61,6 +59,33 @@ def create_ticket_table(table_name):
             'WriteCapacityUnits': 5
         }
     )
+
+def create_id_table(table_name):
+    table = dynamodb.create_table(
+        TableName=table_name,
+        KeySchema=[
+            {
+                'AttributeName': 'id',
+                'KeyType': 'HASH'
+            }
+        ],
+        AttributeDefinitions=[
+            {
+                'AttributeName': 'id',
+                'AttributeType': 'S'
+            }
+        ],
+        ProvisionedThroughput={
+            'ReadCapacityUnits': 5,
+            'WriteCapacityUnits': 5
+        }
+    )
+
+    # Wait until the table exists.
+    table.meta.client.get_waiter('table_exists').wait(TableName=table_name)
+
+    # Print out some data about the table.
+    print("Table Made")
 
     # Wait until the table exists.
     table.meta.client.get_waiter('table_exists').wait(TableName=table_name)
@@ -595,3 +620,118 @@ def release_notes(sprint_name):
         "story_points": story_points,
         "release_notes": release_notes
     }
+
+def individual_performance(sprint_name):
+    project = "DATA"
+    count = 0
+    user = os.getenv('JIRA_USERNAME')
+    api_key = os.getenv('JIRA_API')
+    jira = Jira('https://wellapp.atlassian.net', user, api_key)
+    jql = 'project = "%s" AND Sprint = "%s" AND type != "Sub-task"' % (project, sprint_name)
+    fields = ['key','summary','fields.status.name', 'assignee.displayName', 'priority.name',"issuetype", \
+            "customfield_10008", "customfield_10899", "customfield_10889", "customfield_10827", \
+            "created", "labels"]
+
+    results = jira.jql(jql, start=count)#, fields=fields)
+    df = pd.json_normalize(results["issues"])
+    count += 50
+    while count < results['total']:
+        results_new = jira.jql(jql, start=count, fields=fields)
+        if results_new['issues'] == []:
+            break
+        df = df.append(pd.json_normalize(results_new["issues"]))
+        count += 50
+
+    df["fields.url"] = 'https://wellapp.atlassian.net/browse/'+df["key"]
+    # Take main df with fields and reduce to only relevant columns and only if the ticket is completed
+    df_reduced = df.filter(items=["key", "fields.issuetype.name", "fields.assignee.displayName","fields.status.name", 'fields.customfield_10899', "fields.customfield_10008", \
+                        "fields.labels", "fields.url"])
+
+    # Start cleaning data
+    team_name_column = []
+    new_story_points = []
+    for index, row in df_reduced.iterrows():
+        data_team_type = []
+        if row['fields.customfield_10899'] != None:
+            for val in row['fields.customfield_10899']:
+                data_team_type.append(val['value'])
+            
+            team_name_column.append(data_team_type)
+        else:
+            team_name_column.append(None)
+        
+        if row['fields.issuetype.name'] == 'Task':
+            new_story_points.append(0.5)
+        else:
+            new_story_points.append(row['fields.customfield_10008'])
+        
+
+    df_reduced['fields.customfield_10899'] = team_name_column
+    df_reduced['fields.customfield_10008'] = new_story_points
+
+    tickets_finished = \
+        df_reduced[df_reduced['fields.status.name'] == 'Done']\
+            .groupby('fields.assignee.displayName')\
+            .agg({
+                'fields.customfield_10008': 'sum',
+                'key': 'count'
+            })\
+            .reset_index()\
+            .rename(columns= {
+                'fields.assignee.displayName': 'name',
+                'fields.customfield_10008': 'finished_story_points',
+                'key': 'finished_ticket_count'
+            })
+
+    tickets_unfinished = \
+        df_reduced[df_reduced['fields.status.name'] != 'Done' or df_reduced['fields.status.name'] != 'Rejected/Invalid']\
+            .groupby('fields.assignee.displayName')\
+            .agg({
+                'fields.customfield_10008': 'sum',
+                'key': 'count'
+            })\
+            .reset_index()\
+            .rename(columns= {
+                'fields.assignee.displayName': 'name',
+                'fields.customfield_10008': 'unfinished_story_points',
+                'key': 'unfinished_ticket_count'
+            })
+
+    # Create main dataframe
+    individual_performance = tickets_finished.join(tickets_unfinished.set_index('name'), on='name').fillna(0)
+
+    # Adding calculation columns
+    individual_performance['percent_finished_tickets'] = individual_performance['finished_ticket_count']/(individual_performance['finished_ticket_count']+individual_performance['unfinished_ticket_count'])
+    individual_performance['percent_story_point_finished'] = individual_performance['finished_story_points']/(individual_performance['finished_story_points']+individual_performance['unfinished_story_points'])
+    individual_performance['bug_time_completed'] = [np.nan] * len(individual_performance) # To potentially be added in the future
+    individual_performance['percent_tickets_completed_in_one_sprint'] = [np.nan] * len(individual_performance) # To potentially be added in the future
+
+    # Cleaning
+    individual_performance.replace([np.nan], [None])
+
+    # Push to Table
+    try:
+        create_id_table('individual_performance')
+    except:
+        print("individual_performance table already made")
+
+    table= dynamodb.Table('individual_performance')
+    with table.batch_writer() as batch:
+        sprint_id = get_sprint_id(sprint_name)
+        for index, row in individual_performance.iterrows():
+            batch.put_item(
+                Item={
+                    'id': str(random.getrandbits(64)),
+                    'sprint_id': int(sprint_id),
+                    'name': row['name'],
+                    'finished_story_points': Decimal(row['finished_story_points']),
+                    'finished_ticket_count': Decimal(row['finished_ticket_count']),
+                    'unfinished_story_points': Decimal(row['unfinished_story_points']),
+                    'unfinished_ticket_count': Decimal(row['unfinished_ticket_count'])
+                }
+            )
+    print('Exported into DB')
+
+    # Processing for Slack Script
+
+    return individual_performance.set_index('name').to_json()

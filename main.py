@@ -1,4 +1,4 @@
-from sprint_optimization_script import main, get_info, release_notes
+from sprint_optimization_script import main, get_info, release_notes, individual_performance
 from flask import Flask, request
 import json
 import requests, sys, os
@@ -87,6 +87,13 @@ def release_note_bot(sprint_name):
         raise Exception(slack_response.status_code, slack_response.text)
 
 
+def individual_performance_update(sprint_name):
+    # Intake Jira Webhook
+    payload = individual_performance(sprint_name)
+    ### Send Slack Webhook
+    #url = os.getenv('Individual_Performance_WEBHOOK')
+
+
 @app.route('/response', methods=['GET','POST'])
 def response():
     # Definition for Process
@@ -106,6 +113,7 @@ def response():
         #thread.start() # Doesn't work with Lambda (as it shuts down as soon as it returns a message)
         processing_sprint_optimization(post_data['data'])
         release_note_bot(post_data['data'])
+        individual_performance(post_data['data'])
 
         return {"message": "Accepted"}, 202
     elif verify_token == "INVALID":
