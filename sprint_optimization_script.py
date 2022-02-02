@@ -684,7 +684,7 @@ def individual_performance(sprint_name):
             })
 
     tickets_unfinished = \
-        df_reduced[df_reduced['fields.status.name'] != 'Done' or df_reduced['fields.status.name'] != 'Rejected/Invalid']\
+        df_reduced[df_reduced['fields.status.name'] != 'Done']\
             .groupby('fields.assignee.displayName')\
             .agg({
                 'fields.customfield_10008': 'sum',
