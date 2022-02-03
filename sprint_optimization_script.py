@@ -648,7 +648,7 @@ def individual_performance(sprint_name):
     # Take main df with fields and reduce to only relevant columns and only if the ticket is completed
     df_reduced = df.filter(items=["key", "fields.issuetype.name", "fields.assignee.displayName","fields.status.name", 'fields.customfield_10899', "fields.customfield_10008", \
                         "fields.labels", "fields.url"])
-    df_reduced.to_csv('test.csv')
+
     # Start cleaning data
     team_name_column = []
     new_story_points = []
