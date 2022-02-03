@@ -672,7 +672,7 @@ def individual_performance(sprint_name):
     df_reduced['fields.customfield_10008'] = new_story_points
 
     tickets_finished = \
-        df_reduced[df_reduced['fields.status.name'] == 'Done']\
+        df_reduced[df_reduced['fields.status.name'].isin(['Done', 'Rejected/Invalid']) ]\
             .groupby('fields.assignee.displayName')\
             .agg({
                 'fields.customfield_10008': 'sum',
@@ -686,18 +686,18 @@ def individual_performance(sprint_name):
             })
 
     tickets_unfinished = \
-        df_reduced[df_reduced['fields.status.name'] != 'Done']\
-            .groupby('fields.assignee.displayName')\
-            .agg({
-                'fields.customfield_10008': 'sum',
-                'key': 'count'
-            })\
-            .reset_index()\
-            .rename(columns= {
-                'fields.assignee.displayName': 'name',
-                'fields.customfield_10008': 'unfinished_story_points',
-                'key': 'unfinished_ticket_count'
-            })
+            df_reduced[~df_reduced['fields.status.name'].isin(['Done', 'Rejected/Invalid']) ]\
+                .groupby('fields.assignee.displayName')\
+                .agg({
+                    'fields.customfield_10008': 'sum',
+                    'key': 'count'
+                })\
+                .reset_index()\
+                .rename(columns= {
+                    'fields.assignee.displayName': 'name',
+                    'fields.customfield_10008': 'unfinished_story_points',
+                    'key': 'unfinished_ticket_count'
+                })
 
     # Create main dataframe
     individual_performance = tickets_finished.join(tickets_unfinished.set_index('name'), on='name').fillna(0)
