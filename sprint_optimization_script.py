@@ -4,6 +4,7 @@ import numpy as np
 from atlassian import Jira
 import os, re, random
 from decimal import Decimal
+from time import sleep
 from dateutil.parser import isoparse
 
 import boto3, random
@@ -628,25 +629,26 @@ def individual_performance(sprint_name):
     api_key = os.getenv('JIRA_API')
     jira = Jira('https://wellapp.atlassian.net', user, api_key)
     jql = 'project = "%s" AND Sprint = "%s" AND type != "Sub-task"' % (project, sprint_name)
-    fields = ['key','summary','fields.status.name', 'assignee.displayName', 'priority.name',"issuetype", \
-            "customfield_10008", "customfield_10899", "customfield_10889", "customfield_10827", \
-            "created", "labels"]
+    #fields = ['key','summary','assignee.displayName', 'fields.status.name', 'priority.name',"issuetype", \
+#            "customfield_10008", "customfield_10899", "customfield_10889", "customfield_10827", \
+#            "created", "labels"]
 
     results = jira.jql(jql, start=count)#, fields=fields)
     df = pd.json_normalize(results["issues"])
     count += 50
     while count < results['total']:
-        results_new = jira.jql(jql, start=count, fields=fields)
+        results_new = jira.jql(jql, start=count)#, fields=fields)
         if results_new['issues'] == []:
             break
         df = df.append(pd.json_normalize(results_new["issues"]))
+        df = df.reset_index(drop=True)
         count += 50
 
     df["fields.url"] = 'https://wellapp.atlassian.net/browse/'+df["key"]
     # Take main df with fields and reduce to only relevant columns and only if the ticket is completed
     df_reduced = df.filter(items=["key", "fields.issuetype.name", "fields.assignee.displayName","fields.status.name", 'fields.customfield_10899', "fields.customfield_10008", \
                         "fields.labels", "fields.url"])
-
+    df_reduced.to_csv('test.csv')
     # Start cleaning data
     team_name_column = []
     new_story_points = []
