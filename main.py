@@ -1,4 +1,4 @@
-from sprint_optimization_script import main, get_info, release_notes, individual_performance
+from sprint_optimization_script import main, get_info, release_notes, individual_performance, get_webhook_token, correct_key, get_project_key
 from flask import Flask, request
 import json
 import requests, sys, os
@@ -8,15 +8,12 @@ from time import sleep
 
 app = Flask(__name__)
 
-WEBHOOK_VERIFY_TOKEN = os.getenv('WEBHOOK_VERIFY_TOKEN')
-
-def processing_sprint_optimization(sprint_name):
+def processing_sprint_optimization(sprint_name, project, url):
     # Intake Jira Webhook
-    main(sprint_name)
+    main(sprint_name, project)
     sleep(2)
-    payload = get_info(sprint_name)
+    payload = get_info(sprint_name, project)
     ### Send Slack Webhook
-    url = os.getenv('SPRINT_OPTIMIZATION_BOT_WEBHOOK')
     slack_data = {
         "current_ticket_count": str(payload[0]),
         "current_ticket_count_avg": str(payload[1]),
@@ -53,7 +50,7 @@ def release_note_bot(sprint_name):
     # Loop for all messages in release notes
     full_release = []
     for count in range(0, len(payload['release_notes']['keys'])):
-        single_release = '<{url}|{key}> | {release_note}'.format(url=payload['release_notes']['links'][count], key=payload['release_notes']['keys'][count],\
+        single_release = '<{url}|{key}> | {release_note}'.format(url=payload['release_notes']['links'][count], key=payload['release_notes']['keys'][count], \
             release_notes=payload['release_note']['notes'][count])
         full_release.append(single_release)
 
@@ -87,9 +84,9 @@ def release_note_bot(sprint_name):
         raise Exception(slack_response.status_code, slack_response.text)
 
 
-def individual_performance_update(sprint_name):
+def individual_performance_update(sprint_name, project):
     # Intake Jira Webhook
-    payload = individual_performance(sprint_name)
+    payload = individual_performance(sprint_name, project)
     ### Send Slack Webhook
     #url = os.getenv('Individual_Performance_WEBHOOK')
 
@@ -104,19 +101,24 @@ def response():
     except TypeError:
         return {"message": "No Data Passed Through"}, 401
     try:
-        verify_token = post_data['token']
+        key_validation = correct_key(post_data['token'])
     except KeyError:
-        verify_token = "INVALID"
-    if verify_token == WEBHOOK_VERIFY_TOKEN:
+        key_validation = "INVALID"
+    if key_validation:
         print("token valid")
-        #thread = Process(target=processing, args=(post_data['data'],))
-        #thread.start() # Doesn't work with Lambda (as it shuts down as soon as it returns a message)
-        processing_sprint_optimization(post_data['data'])
-        release_note_bot(post_data['data'])
-        individual_performance(post_data['data'])
+        #Grabbing webhook based off of key
+        # Since we grab board ID, we need to convert to project name
+        team_id = get_project_key(post_data['team'])
+        print('TEAM ID')
+        print(team_id)
+        processing_sprint_optimization(post_data['data'], team_id, get_webhook_token(post_data['token']))
+        if team_id == 'DATA':
+            release_note_bot(post_data['data'], team_id)
+            individual_performance(post_data['data'], team_id)
+        # Will need to revisit last two so these are data team specific
 
         return {"message": "Accepted"}, 202
-    elif verify_token == "INVALID":
+    elif key_validation == "INVALID":
         return {"message": "No Token"}, 401
     else:
         return {"message": "Not Authorized"}, 401

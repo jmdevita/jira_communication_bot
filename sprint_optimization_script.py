@@ -4,6 +4,7 @@ import numpy as np
 from atlassian import Jira
 import os, re, random
 from decimal import Decimal
+from datetime import datetime
 from time import sleep
 from dateutil.parser import isoparse
 
@@ -105,9 +106,8 @@ def get_sprint_id(sprint_name):
 
     return int(sprint_id)
 
-def new_sprint(sprint_name):
+def new_sprint(sprint_name, project):
     #Capture sprint information
-    project = "DATA"
 
     user = os.getenv('JIRA_USERNAME')
     api_key = os.getenv('JIRA_API')
@@ -150,7 +150,8 @@ def new_sprint(sprint_name):
                 'year': year,
                 'sprint_name': sprint_name,
                 'sprint_number': re.findall("\d+", sprint_name)[0],
-                'sprint_id': sprint_key
+                'sprint_id': sprint_key,
+                'team': project
             }
         )
     print("Sprint Record Added")
@@ -169,16 +170,15 @@ def sprint_bug_stats(bug_count, avg_time_resolved, st_dev, sprint_id):
         )
     print("Sprint Bugs Added")
 
-def sprint_story_points(sprint_name):
+def sprint_story_points(sprint_name, project):
     count = 0
 
-    project = "DATA"
-    jql = 'project = DATA and Sprint = "%s" and (type != Sub-Task AND type != Epic) and "Flagged[Checkboxes]" IS EMPTY' % sprint_name
+    jql = 'project = "%s" and Sprint = "%s" and (type != Sub-Task AND type != Epic) and "Flagged[Checkboxes]" IS EMPTY' % (project, sprint_name)
     user = os.getenv('JIRA_USERNAME')
     api_key = os.getenv('JIRA_API')
 
     jira = Jira('https://wellapp.atlassian.net', user, api_key)
-    fields = ['key','summary','status', 'assignee','priority',"issuetype", "customfield_10008", "customfield_10899", "description", "customfield_10827", "created", "labels"]
+    fields = ['key','summary','status', 'assignee','priority',"issuetype", "customfield_10008", "description", "created", "labels"]
 
     results = jira.jql(jql, start=count, fields = fields)
     df = pd.json_normalize(results["issues"])
@@ -193,7 +193,7 @@ def sprint_story_points(sprint_name):
         count += 50
 
     df["fields.url"] = 'https://wellapp.atlassian.net/browse/'+df["key"]
-    df = df[['key', 'fields.issuetype.name','fields.created', 'fields.customfield_10008','fields.customfield_10827', 'fields.summary', 'fields.status.name', 'fields.description', 'fields.assignee.displayName', 'fields.customfield_10899', 'fields.priority.name', 'fields.url', 'fields.labels']]
+    df = df[['key', 'fields.issuetype.name','fields.created', 'fields.customfield_10008', 'fields.summary', 'fields.status.name', 'fields.description', 'fields.assignee.displayName', 'fields.priority.name', 'fields.url', 'fields.labels']]
 
     df = df.reset_index(drop=True)
     df['fields.customfield_10008'] = df['fields.customfield_10008'].fillna(0)
@@ -209,7 +209,7 @@ def sprint_story_points(sprint_name):
     result = df_2['fields.customfield_10008'][0]
     return result
 
-def sprint_ticket_stats(ticket_count, story_points, avg_time_tickets_completed, percent_completed, sprint_id):
+def sprint_ticket_stats(ticket_count, story_points, avg_time_tickets_completed, percent_completed, sprint_id, project):
     
     table= dynamodb.Table('sprint_ticket_information')
     ## Add a record with a list
@@ -219,7 +219,8 @@ def sprint_ticket_stats(ticket_count, story_points, avg_time_tickets_completed, 
                 'story_points': str(story_points),
                 'avg_time_tickets_completed': str(avg_time_tickets_completed),
                 'percent_completed': str(percent_completed),
-                'sprint_id': int(sprint_id)
+                'sprint_id': int(sprint_id),
+                'team': str(project)
             }
         )
     print("Sprint Ticket Analysis Added")
@@ -234,9 +235,41 @@ def jira_count(project):
 
     return results
 
+def get_webhook_token(key):
+    table= dynamodb.Table('jira_bot_webhook_keys')
+    try:
+        response = table.query(
+            KeyConditionExpression=Key('key').eq(key))
 
+        team_webhook = str(response["Items"][0]['webhook_url'])
+    except:
+        team_webhook = None
+    return team_webhook
 
-def main(sprint_name = 'Panda Dash 74'):
+def correct_key(key):
+    table= dynamodb.Table('jira_bot_webhook_keys')
+    response = table.query(
+        KeyConditionExpression=Key('key').eq(key))
+
+    items = response["Items"]
+    if items:
+        key_exists = True
+    else:
+        key_exists = False
+    return key_exists
+
+def get_project_key(sprint_id):
+    user = os.getenv('JIRA_USERNAME')
+    api_key = os.getenv('JIRA_API')
+
+    jira = Jira('https://wellapp.atlassian.net', user, api_key)
+
+    json_result = jira.get_agile_board(sprint_id)
+    key = json_result['location']['projectKey']
+
+    return key
+
+def main(sprint_name, project):
     if sprint_name == "":
         exit
     
@@ -249,7 +282,6 @@ def main(sprint_name = 'Panda Dash 74'):
         print("Sprint Table already created")
 
     print("Connecting to Jira")
-    project = "DATA"
 
     user = os.getenv('JIRA_USERNAME')
     api_key = os.getenv('JIRA_API')
@@ -283,8 +315,6 @@ def main(sprint_name = 'Panda Dash 74'):
         copy=True,
     )
 
-    from datetime import datetime
-
     time_diff = []
 
     for key in df['key']:
@@ -307,7 +337,6 @@ def main(sprint_name = 'Panda Dash 74'):
         except:
             pass
 
-    import numpy as np
     np_time = np.array(time_diff)[np.array(time_diff) >= 0]
     tickets = len(df)
     completion_rate = np.mean(np_time)
@@ -318,15 +347,14 @@ def main(sprint_name = 'Panda Dash 74'):
     except:
         print("Sprint Ticket Table already created")
 
-    new_sprint(sprint_name)
+    new_sprint(sprint_name, project)
 
-    sprint_ticket_stats(tickets, sprint_story_points(sprint_name), completion_rate, percent_complete_under_sprint, get_sprint_id(sprint_name))
+    sprint_ticket_stats(tickets, sprint_story_points(sprint_name, project), completion_rate, percent_complete_under_sprint, get_sprint_id(sprint_name), project)
 
 
     # %%
     print("Connecting to Jira - Round 2")
     count = 0
-    project = "DATA"
     ## Requires create_sprint definition to run first (global variables start_date and end_date)
     jql = 'project = "%s" AND status = "Done" AND type = "Bug" AND createdDate >= "%s" AND createdDate <= "%s"' % (project, start_date, end_date)
 
@@ -344,8 +372,6 @@ def main(sprint_name = 'Panda Dash 74'):
 
         df_bug = df_bug.append(pd.json_normalize(results["issues"]))
         count += 50
-
-    from datetime import datetime
 
     bug_time_diff = []
 
@@ -377,14 +403,16 @@ def main(sprint_name = 'Panda Dash 74'):
     sprint_bug_stats(len(df_bug['key']), np.mean(bug_np_time), np.std(bug_np_time), get_sprint_id(sprint_name))
 
 # %%
-def get_info(sprint_name):
+def get_info(sprint_name, project):
     table= dynamodb.Table('sprint_information')
     query_response = table.query(
             IndexName='sprint_number-index',
             KeyConditionExpression=Key('sprint_number').eq(str(int(re.findall("\d+", sprint_name)[0])-1))
     )
-
-    previous_sprint_id = query_response['Items'][0]['sprint_id']
+    try:
+        previous_sprint_id = query_response['Items'][0]['sprint_id']
+    except IndexError:
+        previous_sprint_id = None
 
     query_response = table.query(
             IndexName='sprint_number-index',
@@ -402,18 +430,18 @@ def get_info(sprint_name):
     completion_rate = sprint_results['Items'][0]['avg_time_tickets_completed']
     percent_complete_under_sprint = sprint_results['Items'][0]['percent_completed']
 
-
     table= dynamodb.Table('sprint_bug_information')
-    bug_results = table.query(
+    if previous_sprint_id != None:
+        bug_results = table.query(
             KeyConditionExpression=Key('sprint_id').eq(previous_sprint_id)
-    )
-
-    previous_bug_resolved_days = float(bug_results['Items'][0]['avg_time_resolved'])
+        )
+        previous_bug_resolved_days = float(bug_results['Items'][0]['avg_time_resolved'])
+    else:
+        previous_bug_resolved_days = 0
 
     bug_results = table.query(
             KeyConditionExpression=Key('sprint_id').eq(current_sprint_id)
     )
-
     current_bug_resolved_days = float(bug_results['Items'][0]['avg_time_resolved'])
 
 
@@ -431,6 +459,12 @@ def get_info(sprint_name):
 
     for item in results["Items"]:
         if item['sprint_id'] == sprint_id:
+            pass
+        try:
+            item['team']
+        except KeyError: # This means there is no team category (pre-addition)
+            item['team'] = None
+        if item['team'] != project:
             pass
         else:
             avg_ticket_list.append(float(item['avg_time_tickets_completed']))
@@ -495,7 +529,7 @@ def get_info(sprint_name):
     current_ticket_count_avg = round(current_ticket_count_avg,2)
     ticket_comparison = ticket_comparison
     previous_ticket_count = round(previous_ticket_count_avg,2)
-    current_sprint_story_points = sprint_story_points(sprint_name)
+    current_sprint_story_points = sprint_story_points(sprint_name, project)
     sp_comparison = sp_comparison
     previous_sprint_sp_avg = round(previous_sprint_sp_avg,2)
     current_sprint_sp_avg = round(current_sprint_sp_avg,2)
@@ -533,8 +567,7 @@ def get_info(sprint_name):
         completion_comparison
     ]
 
-def release_notes(sprint_name):
-    project = "DATA"
+def release_notes(sprint_name, project):
     count = 0
     user = os.getenv('JIRA_USERNAME')
     api_key = os.getenv('JIRA_API')
@@ -622,8 +655,7 @@ def release_notes(sprint_name):
         "release_notes": release_notes
     }
 
-def individual_performance(sprint_name):
-    project = "DATA"
+def individual_performance(sprint_name, project):
     count = 0
     user = os.getenv('JIRA_USERNAME')
     api_key = os.getenv('JIRA_API')
