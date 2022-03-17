@@ -405,18 +405,20 @@ def main(sprint_name, project):
 # %%
 def get_info(sprint_name, project):
     table= dynamodb.Table('sprint_information')
-    query_response = table.query(
-            IndexName='sprint_number-index',
-            KeyConditionExpression=Key('sprint_number').eq(str(int(re.findall("\d+", sprint_name)[0])-1))
+    query_response = table.scan(
+            FilterExpression= \
+                Attr('sprint_number').eq(str(int(re.findall("\d+", sprint_name)[0]) - 1)) \
+                & Attr('team').eq(str(project))
     )
     try:
         previous_sprint_id = query_response['Items'][0]['sprint_id']
     except IndexError:
         previous_sprint_id = None
 
-    query_response = table.query(
-            IndexName='sprint_number-index',
-            KeyConditionExpression=Key('sprint_number').eq(str(int(re.findall("\d+", sprint_name)[0])))
+    query_response = table.scan(
+            FilterExpression= \
+                Attr('sprint_number').eq(str(re.findall("\d+", sprint_name)[0])) \
+                & Attr('team').eq(str(project))
     )
 
     current_sprint_id = query_response['Items'][0]['sprint_id']
@@ -458,24 +460,23 @@ def get_info(sprint_name, project):
     sp_list = []
 
     for item in results["Items"]:
-        if item['sprint_id'] == sprint_id:
-            pass
-        try:
-            item['team']
-        except KeyError: # This means there is no team category (pre-addition)
-            item['team'] = None
-        if item['team'] != project:
-            pass
-        else:
+        if item['sprint_id'] != sprint_id and item['team'] == project:
+            print(item['sprint_id'])
             avg_ticket_list.append(float(item['avg_time_tickets_completed']))
             ticket_count_list.append(float(item['ticket_count']))
             percent_completed_list.append(float(item['percent_completed']))
             sp_list.append(float(item['story_points']))
 
-    previous_ticket_avg = np.mean(avg_ticket_list)
-    previous_ticket_count_avg = np.mean(ticket_count_list)
-    previous_percent_completion = np.mean(percent_completed_list)
-    previous_sprint_sp_avg = np.mean(sp_list)
+    if avg_ticket_list:
+        previous_ticket_avg = np.mean(avg_ticket_list)
+        previous_ticket_count_avg = np.mean(ticket_count_list)
+        previous_percent_completion = np.mean(percent_completed_list)
+        previous_sprint_sp_avg = np.mean(sp_list)
+    else:
+        previous_ticket_avg = 0
+        previous_ticket_count_avg = 0
+        previous_percent_completion = 0
+        previous_sprint_sp_avg = 0
 
     avg_ticket_list = []
     ticket_count_list = []
@@ -483,10 +484,11 @@ def get_info(sprint_name, project):
     sp_list = []
 
     for item in results["Items"]:
-        avg_ticket_list.append(float(item['avg_time_tickets_completed']))
-        ticket_count_list.append(float(item['ticket_count']))
-        percent_completed_list.append(float(item['percent_completed']))
-        sp_list.append(float(item['story_points']))
+        if item['team'] == project:
+            avg_ticket_list.append(float(item['avg_time_tickets_completed']))
+            ticket_count_list.append(float(item['ticket_count']))
+            percent_completed_list.append(float(item['percent_completed']))
+            sp_list.append(float(item['story_points']))
 
     current_ticket_avg = np.mean(avg_ticket_list)
     current_ticket_count_avg = np.mean(ticket_count_list)
