@@ -461,7 +461,6 @@ def get_info(sprint_name, project):
 
     for item in results["Items"]:
         if item['sprint_id'] != sprint_id and item['team'] == project:
-            print(item['sprint_id'])
             avg_ticket_list.append(float(item['avg_time_tickets_completed']))
             ticket_count_list.append(float(item['ticket_count']))
             percent_completed_list.append(float(item['percent_completed']))
@@ -626,26 +625,28 @@ def release_notes(sprint_name, project):
     with table.batch_writer() as batch:
         sprint_id = get_sprint_id(sprint_name)
         for index, row in df_reduced.iterrows():
-            try:
-                story_points = int(row['fields.customfield_10008'])
-            except ValueError:
-                story_points = None
-            batch.put_item(
-                Item={
-                    'ticket_id': row['key'],
-                    'sprint_id': sprint_id,
-                    'ticket_type': row['fields.issuetype.name'],
-                    'story_points': story_points,
-                    'team': row['fields.customfield_10899'],
-                    'label': row['fields.labels'],
-                    'release_notes': row['fields.customfield_10889']
-                }
-            )
+            if row['fields.customfield_10889']:
+                try:
+                    story_points = int(row['fields.customfield_10008'])
+                except ValueError:
+                    story_points = None
+                batch.put_item(
+                    Item={
+                        'ticket_id': row['key'],
+                        'sprint_id': sprint_id,
+                        'ticket_type': row['fields.issuetype.name'],
+                        'story_points': story_points,
+                        'team': row['fields.customfield_10899'],
+                        'label': row['fields.labels'],
+                        'release_notes': row['fields.customfield_10889']
+                    }
+                )
     print('Exported into DB')
 
     # Processing to send a Payload
     ticket_count = len(df_reduced['key'])
     story_points = int(df_reduced['fields.customfield_10008'].sum())
+
     release_notes = {
         'keys': df_reduced['key'][df_reduced['fields.customfield_10889'].notnull()].to_list(),
         'links': df_reduced['fields.url'][df_reduced['fields.customfield_10889'].notnull()].to_list(),

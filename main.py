@@ -41,17 +41,17 @@ def processing_sprint_optimization(sprint_name, project, url):
     if slack_response.status_code != 200:
         raise Exception(slack_response.status_code, slack_response.text)
 
-def release_note_bot(sprint_name):
+def release_note_bot(sprint_name, project):
     # Intake Jira Webhook
-    payload = release_notes(sprint_name)
+    payload = release_notes(sprint_name, project)
     ### Send Slack Webhook
     url = os.getenv('RELEASE_NOTE_WEBHOOK')
 
     # Loop for all messages in release notes
     full_release = []
     for count in range(0, len(payload['release_notes']['keys'])):
-        single_release = '<{url}|{key}> | {release_note}'.format(url=payload['release_notes']['links'][count], key=payload['release_notes']['keys'][count], \
-            release_notes=payload['release_note']['notes'][count])
+        single_release = '<{url}|{key}> | {release_notes}'.format(url=payload['release_notes']['links'][count], key=payload['release_notes']['keys'][count], \
+            release_notes=payload['release_notes']['notes'][count])
         full_release.append(single_release)
 
     slack_data = {
@@ -109,13 +109,10 @@ def response():
         #Grabbing webhook based off of key
         # Since we grab board ID, we need to convert to project name
         team_id = get_project_key(post_data['team'])
-        print('TEAM ID')
-        print(team_id)
         processing_sprint_optimization(post_data['data'], team_id, get_webhook_token(post_data['token']))
         if team_id == 'DATA':
             release_note_bot(post_data['data'], team_id)
             individual_performance(post_data['data'], team_id)
-        # Will need to revisit last two so these are data team specific
 
         return {"message": "Accepted"}, 202
     elif key_validation == "INVALID":
