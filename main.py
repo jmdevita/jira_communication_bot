@@ -64,6 +64,7 @@ def release_note_bot(sprint_name, project):
         single_release_slack = '<{url}|{key}> | {release_notes}'.format(url=payload['release_notes']['links'][count], key=payload['release_notes']['keys'][count], \
             release_notes=payload['release_notes']['notes'][count])
         full_release_slack.append(single_release_slack)
+        
         single_release_confluence = '\n<a href="{url}">{key}</a> | {release_notes}'.format(url=payload['release_notes']['links'][count], key=payload['release_notes']['keys'][count], \
             release_notes=payload['release_notes']['notes'][count])
         full_release_confluence.append(single_release_confluence)
