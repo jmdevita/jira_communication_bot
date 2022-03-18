@@ -2,7 +2,9 @@ from sprint_optimization_script import main, get_info, release_notes, individual
 from flask import Flask, request
 import json
 import requests, sys, os
+from atlassian import Confluence
 from time import sleep
+from datetime import datetime
 #from dotenv import load_dotenv
 #load_dotenv()
 
@@ -46,13 +48,25 @@ def release_note_bot(sprint_name, project):
     payload = release_notes(sprint_name, project)
     ### Send Slack Webhook
     url = os.getenv('RELEASE_NOTE_WEBHOOK')
-
+    user = os.getenv('JIRA_USERNAME')
+    api_key = os.getenv('JIRA_API')
+    date = datetime.today().strftime('%m/%d/%Y')
+    confluence = Confluence('https://wellapp.atlassian.net', user, api_key)
     # Loop for all messages in release notes
-    full_release = []
+    full_release_slack = []
+    full_release_confluence = []
+    confluence_body = \
+        """
+        <h2>{sprint_name}</h2>
+        <h3>{date}</h3>
+        """.format(sprint_name=sprint_name, date=date)
     for count in range(0, len(payload['release_notes']['keys'])):
-        single_release = '<{url}|{key}> | {release_notes}'.format(url=payload['release_notes']['links'][count], key=payload['release_notes']['keys'][count], \
+        single_release_slack = '<{url}|{key}> | {release_notes}'.format(url=payload['release_notes']['links'][count], key=payload['release_notes']['keys'][count], \
             release_notes=payload['release_notes']['notes'][count])
-        full_release.append(single_release)
+        full_release_slack.append(single_release_slack)
+        single_release_confluence = '\n<a href="{url}">{key}</a> | {release_notes}'.format(url=payload['release_notes']['links'][count], key=payload['release_notes']['keys'][count], \
+            release_notes=payload['release_notes']['notes'][count])
+        full_release_confluence.append(single_release_confluence)
 
     slack_data = {
         "blocks": [
@@ -71,7 +85,7 @@ def release_note_bot(sprint_name, project):
                         .format(
                             tc=payload['ticket_count'],
                             sp=payload['story_points'],
-                            rn='\n'.join(full_release)
+                            rn='\n'.join(full_release_slack)
                         )
                 }
             }
@@ -82,7 +96,8 @@ def release_note_bot(sprint_name, project):
     slack_response = requests.post(url, data=json.dumps(slack_data), headers=headers)
     if slack_response.status_code != 200:
         raise Exception(slack_response.status_code, slack_response.text)
-
+    # Send Confluence
+    confluence.append_page(title='Releases', page_id='2381283406', append_body=confluence_body+'\n'.join(full_release_confluence), representation='storage', minor_edit=True)
 
 def individual_performance_update(sprint_name, project):
     # Intake Jira Webhook
