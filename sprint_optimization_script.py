@@ -234,25 +234,24 @@ def sprint_interrupts(sprint_name, project):
         count += 50
     
     tickets_moved_after_sprint = 0
-    if sprint_tickets:
-        for key in sprint_tickets['key']:
-            try:
-                issue = jira.issue(key, expand = "changelog")
-                sprint_date_committed = None
-                done_date = None
-                _format = "%Y-%m-%dT%H:%M:%S.%f"
-                parsed_string = issue['fields']['created']
-                sprint_date_committed = datetime.strptime(parsed_string[:-5], _format) # when did the change happen?
-                for history in issue['changelog']['histories']:
-                    for item in history['items']:                
-                        if item['field'] == "Sprint":
-                            parsed_string_2 = history['created']
-                            ticket_moved_to_sprint_date = datetime.strptime(parsed_string_2[:-5], _format) # when did the change happen?
-                if ticket_moved_to_sprint_date > sprint_start_date:
-                    tickets_moved_after_sprint += 1
-            except:
-                print("Skipped %s" % key)
-                pass
+    for key in sprint_tickets['key']:
+        try:
+            issue = jira.issue(key, expand = "changelog")
+            sprint_date_committed = None
+            done_date = None
+            _format = "%Y-%m-%dT%H:%M:%S.%f"
+            parsed_string = issue['fields']['created']
+            sprint_date_committed = datetime.strptime(parsed_string[:-5], _format) # when did the change happen?
+            for history in issue['changelog']['histories']:
+                for item in history['items']:                
+                    if item['field'] == "Sprint":
+                        parsed_string_2 = history['created']
+                        ticket_moved_to_sprint_date = datetime.strptime(parsed_string_2[:-5], _format) # when did the change happen?
+            if ticket_moved_to_sprint_date > sprint_start_date:
+                tickets_moved_after_sprint += 1
+        except:
+            print("Skipped %s" % key)
+            pass
 
     return tickets_moved_after_sprint
     
@@ -365,26 +364,25 @@ def main(sprint_name, project):
     )
 
     time_diff = []
-    if df:
-        for key in df['key']:
-            try:
-                issue = jira.issue(key, expand = "changelog")
-                sprint_date_committed = None
-                done_date = None
-                _format = "%Y-%m-%dT%H:%M:%S.%f"
-                #parsed_string = issue['fields']['created']
-                #sprint_date_committed = datetime.strptime(parsed_string[:-5], _format) # when did the change happen?
-                for history in issue['changelog']['histories']:   
-                    for item in history['items']:
-                        if item['field'] == "Sprint":
-                            parsed_string_2 = history['created']
-                            sprint_date_committed = datetime.strptime(parsed_string_2[:-5], _format) # when did the change happen?
-                        if item['field'] == "resolution":
-                            parsed_string_3 = history['created']
-                            done_date = datetime.strptime(parsed_string_3[:-5], _format) # when did the change happen?
-                time_diff.append((done_date - sprint_date_committed).total_seconds() / 60 / 60 / 24)
-            except:
-                pass
+    for key in df['key']:
+        try:
+            issue = jira.issue(key, expand = "changelog")
+            sprint_date_committed = None
+            done_date = None
+            _format = "%Y-%m-%dT%H:%M:%S.%f"
+            #parsed_string = issue['fields']['created']
+            #sprint_date_committed = datetime.strptime(parsed_string[:-5], _format) # when did the change happen?
+            for history in issue['changelog']['histories']:   
+                for item in history['items']:
+                    if item['field'] == "Sprint":
+                        parsed_string_2 = history['created']
+                        sprint_date_committed = datetime.strptime(parsed_string_2[:-5], _format) # when did the change happen?
+                    if item['field'] == "resolution":
+                        parsed_string_3 = history['created']
+                        done_date = datetime.strptime(parsed_string_3[:-5], _format) # when did the change happen?
+            time_diff.append((done_date - sprint_date_committed).total_seconds() / 60 / 60 / 24)
+        except:
+            pass
 
     np_time = np.array(time_diff)[np.array(time_diff) >= 0]
     tickets = len(df)
@@ -423,7 +421,7 @@ def main(sprint_name, project):
         count += 50
 
     bug_time_diff = []
-    if df_bug:
+    if not df_bug.empty:
         for key in df_bug['key']:
             try:
                 issue = jira.issue(key, expand = "changelog")
@@ -441,6 +439,14 @@ def main(sprint_name, project):
             except:
                 print("Skipped %s" % key)
                 pass
+        length_bugs = len(df_bug['key'])
+        bugs_mean = np.mean(bug_np_time)
+        bugs_std = np.std(bug_np_time)
+    else:
+        length_bugs = 0
+        bugs_mean = 0
+        bugs_std = 0
+
 
     bug_np_time = np.array(bug_time_diff)
 
@@ -449,7 +455,7 @@ def main(sprint_name, project):
     except:
         print("Bug Table already created")
 
-    sprint_bug_stats(len(df_bug['key']), np.mean(bug_np_time), np.std(bug_np_time), get_sprint_id(sprint_name))
+    sprint_bug_stats(length_bugs, bugs_mean, bugs_std, get_sprint_id(sprint_name))
 
     print("Connecting to Jira - Round 3")
 
@@ -481,7 +487,8 @@ def get_info(sprint_name, project):
     tickets = sprint_results['Items'][0]['ticket_count']
     completion_rate = sprint_results['Items'][0]['avg_time_tickets_completed']
     percent_complete_under_sprint = sprint_results['Items'][0]['percent_completed']
-    current_sprint_interrupt_tickets = float(query_response['Items'][0]['sprint_interrupt_tickets'])
+    #current_sprint_interrupt_tickets = float(query_response['Items'][0]['sprint_interrupt_tickets'])
+    current_sprint_interrupt_tickets = 0 # This is hardcoded will need to fix
 
     table= dynamodb.Table('sprint_bug_information')
     if previous_sprint_id != None:
