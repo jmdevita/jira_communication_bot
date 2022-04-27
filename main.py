@@ -61,9 +61,10 @@ def release_note_bot(sprint_name, project):
         <h3>{date}</h3>
         """.format(sprint_name=sprint_name, date=date)
     for count in range(0, len(payload['release_notes']['keys'])):
-        single_release_slack = '<{url}|{key}> | {release_notes}'.format(url=payload['release_notes']['links'][count], key=payload['release_notes']['keys'][count], \
-            release_notes=payload['release_notes']['notes'][count])
-        full_release_slack.append(single_release_slack)
+        if count < 5: # This maxes the amount of ticket alerts to only 5 at a time for just slack, Confluence shows all changes.
+            single_release_slack = '<{url}|{key}> | {release_notes}'.format(url=payload['release_notes']['links'][count], key=payload['release_notes']['keys'][count], \
+                release_notes=payload['release_notes']['notes'][count])
+            full_release_slack.append(single_release_slack)
         
         single_release_confluence = '\n<a href="{url}">{key}</a> | {release_notes}'.format(url=payload['release_notes']['links'][count], key=payload['release_notes']['keys'][count], \
             release_notes=payload['release_notes']['notes'][count])
@@ -86,7 +87,7 @@ def release_note_bot(sprint_name, project):
                         .format(
                             tc=payload['ticket_count'],
                             sp=payload['story_points'],
-                            rn='\n'.join(full_release_slack)
+                            rn='\n\n'.join(full_release_slack)
                         )
                 }
             }
