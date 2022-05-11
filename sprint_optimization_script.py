@@ -439,6 +439,8 @@ def main(sprint_name, project):
             except:
                 print("Skipped %s" % key)
                 pass
+        bug_np_time = np.array(bug_time_diff)
+        
         length_bugs = len(df_bug['key'])
         bugs_mean = np.mean(bug_np_time)
         bugs_std = np.std(bug_np_time)
@@ -446,9 +448,6 @@ def main(sprint_name, project):
         length_bugs = 0
         bugs_mean = 0
         bugs_std = 0
-
-
-    bug_np_time = np.array(bug_time_diff)
 
     try:
         create_table('sprint_bug_information')
