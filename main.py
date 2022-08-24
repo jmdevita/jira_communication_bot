@@ -98,7 +98,7 @@ def release_note_bot(sprint_name, project):
     if slack_response.status_code != 200:
         raise Exception(slack_response.status_code, slack_response.text)
     # Send Confluence
-    confluence.append_page(title='Releases', page_id='2381283406', append_body=confluence_body+'\n'.join(full_release_confluence), representation='storage', minor_edit=True)
+    confluence.append_page(title='Releases', page_id='2513174573', append_body=confluence_body+'\n'.join(full_release_confluence), representation='storage', minor_edit=True)
 
 def individual_performance_update(sprint_name, project):
     # Intake Jira Webhook
